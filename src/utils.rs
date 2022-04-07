@@ -7,7 +7,8 @@ impl Default for Command { fn default() -> Self { Self::Run } }
 #[derive(Default)]
 pub struct Options {
     pub command: Command,
-    pub path: String
+    pub path: String,
+    pub out_path: String
 }
 
 pub fn bytes_to_16(hb: u8, lb: u8) -> u16 {
@@ -42,6 +43,12 @@ pub fn parse_int_literal(s: &str) -> Result<u16, String> {
             return Err(format!("unsupported radix {}", radix))
         }
     })
+}
+pub fn set_vec_value_at_index<T: Default>(vec: &mut Vec<T>, val: T, index: usize) {
+    while index >= vec.len() {
+        vec.push(T::default())
+    }
+    vec[index] = val
 }
 
 #[cfg(test)]

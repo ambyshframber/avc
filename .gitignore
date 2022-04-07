@@ -1,3 +1,4 @@
 /target
-/a.out
-/test.txt
+/.todoBAK
+/avc_examples/*.out
+/*.out

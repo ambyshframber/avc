@@ -1,0 +1,11 @@
+        lda #0d104
+        out
+        jsr %LABEL
+        hlt
+CHAR:	dat "beans"
+
+        org 0x300
+LABEL:  
+        lda %CHAR
+        out
+        rts

@@ -1,0 +1,12 @@
+	jmp %PRINT
+DATA:	dat "hello world!"
+	dat 0d10
+	dat 0d0
+
+PRINT:	lda %DATA,x
+	jez %HALT
+	put
+	inc
+	jmp %PRINT
+
+HALT:	hlt

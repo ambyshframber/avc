@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::utils::{u16_to_bytes, parse_int_literal};
+use crate::utils::{u16_to_bytes, parse_int_literal, set_vec_value_at_index};
 
 // parse program into Lines
 // 
@@ -16,7 +16,7 @@ pub fn assemble(program: &str) -> Result<Box<[u8]>, String> {
     let mut a = Assembler::default();
 
     for (i, l) in program.split('\n').enumerate() {
-        match a.read_line(l) {
+        match a.read_line(l, i) {
             Ok(_) => {}
             Err(e) => {
                 return Err(format!("error on line {}: {}", i + 1, e))
@@ -35,23 +35,37 @@ pub fn assemble(program: &str) -> Result<Box<[u8]>, String> {
     }
 }
 impl Assembler {
-    pub fn read_line(&mut self, s: &str) -> Result<(), String> {
+    pub fn read_line(&mut self, s: &str, index: usize) -> Result<(), String> { // index is line number. this is the worst way of doing it, i know
         if s.trim() == "" {
-            self.lines.push(Line::default());
             return Ok(())
         }
         let parts_initial = s.trim_start().split(':'); // split off label
         let parts = parts_initial.collect::<Vec<&str>>();
         let main_instr = if parts.len() == 2 { // if there is a label, add it
             self.labels.insert(String::from(parts[0].trim()), self.counter);
-            parts[1].trim_start()
+            let main = parts[1].trim();
+            if main == "" {
+                return Ok(())
+            }
+            main
         }
         else {
             parts[0]
         };
+        
         self.counter += 1; // bump counter
 
-        let parts = main_instr.split(' ').collect::<Vec<&str>>(); // split main body of instr
+        let main_instr = main_instr.split(';').next().unwrap(); // ignore comments
+        let split_index = main_instr.find(' ');
+        let (instr, op) = match split_index {
+            Some(i) => {
+                main_instr.split_at(i)
+            }
+            None => {
+                (main_instr, "")
+            }
+        };
+        let op = op.trim();
 
         if parts.len() == 0 {
             panic!()
@@ -61,9 +75,10 @@ impl Assembler {
         type Op = Operand;
         let mut line = Line {
             instruction: I::Nop,
-            operand: Op::None
+            operand: Op::None,
+            program_text_line: index
         };
-        match parts[0] {
+        match instr {
             "nop" => line.instruction = I::Nop,
             "hlt" => line.instruction = I::Hlt,
             "swp" => line.instruction = I::Swp,
@@ -80,7 +95,7 @@ impl Assembler {
             "lsl" => line.instruction = I::Lsl,
             "clc" => line.instruction = I::Clc,
             "sec" => line.instruction = I::Sec,
-            "out" => line.instruction = I::Out,
+            "put" => line.instruction = I::Put,
             "psa" => line.instruction = I::Psa,
             "ppa" => line.instruction = I::Ppa,
             "pss" => line.instruction = I::Pss,
@@ -90,39 +105,46 @@ impl Assembler {
             "brk" => line.instruction = I::Brk,
             "rts" => line.instruction = I::Rts,
             
-            "lda"|"sta"|"org"|"dat"|"blk"|"jmp"|"jsr" => { // wide
-                if parts.len() == 1 { // check operand exists
-                    return Err(format!("instr {} requires op, found none", parts[0]))
+            "lda"|"sta"|"org"|"dat"|"blk"|"jmp"|"jsr"|"jez" => { // wide
+                if op == "" { // check operand exists
+                    return Err(format!("instr {} requires op, found none", instr))
                 }
-                let is_literal = parts[1].starts_with('#'); // check if literal or offset
-                let is_offset = parts[1].ends_with(",x");
-                let is_label = parts[1].starts_with('%');
+                let is_literal = op.starts_with('#'); // check if literal or offset
+                let is_offset = op.ends_with(",x");
+                let is_label = op.starts_with('%');
                 if is_literal && is_offset {
                     return Err(format!("operand cannot be literal and offset!"))
                 }
-                let lit = if is_literal || is_label { // trim markers
-                    &parts[1][1..]
+                let is_string = op.starts_with('"');
+                let mut lit = if is_literal || is_label { // trim markers
+                    &op[1..]
+                }
+                else if is_string {
+                    if instr != "dat" {
+                        return Err(format!("string operand on non-dat instruction!"))
+                    }
+                    if !op.ends_with('"') {
+                        return Err(format!("string operand without closing quote!"))
+                    }
+                    &op[1..op.len() - 1]
                 }
                 else {
-                    parts[1]
+                    op
                 };
-                let lit = if is_offset {
-                    &lit[..lit.len() - 2]
+                if is_offset {
+                    lit = &lit[..lit.len() - 2]
                 }
-                else {
-                    lit
-                };
-                let operand = if is_label {
+                let operand = if is_label || is_string {
                     0
                 }
                 else {
-                    match parse_int_literal(lit) { // TODO
+                    match parse_int_literal(lit) {
                         Ok(v) => v,
                         Err(e) => return Err(e)
                     }
                 };
                 self.counter += 1; // bump counter
-                match parts[0] {
+                match instr {
                     "lda" => {
                         if is_literal {
                             line.instruction = I::LdaConst;
@@ -189,6 +211,21 @@ impl Assembler {
                         }
                         self.counter += 1; // bump counter
                     }
+                    "jez" => {
+                        if is_offset {
+                            line.instruction = I::JezAddrOffset
+                        }
+                        else {
+                            line.instruction = I::JezAddr
+                        }
+                        if is_label {
+                            line.operand = Op::Label(String::from(lit))
+                        }
+                        else {
+                            line.operand = Op::Addr(operand);
+                        }
+                        self.counter += 1; // bump counter
+                    }
                 
                     "org" => {
                         line.instruction = I::Org;
@@ -197,7 +234,14 @@ impl Assembler {
                     }
                     "dat" => {
                         line.instruction = I::Dat;
-                        line.operand = Op::Byte(operand as u8);
+                        if is_string {
+                            let bytes = lit.bytes().collect::<Vec<u8>>();
+                            self.counter += bytes.len() - 1; // i don't know why the -1 is needed, but it is.
+                            line.operand = Op::ByteBlock(bytes.into_boxed_slice())
+                        }
+                        else {
+                            line.operand = Op::Byte(operand as u8);
+                        }
                         self.counter -= 1
                     }
                     _ => {
@@ -206,7 +250,7 @@ impl Assembler {
                 }
             }
             _ => {
-                return Err(format!("unrecognised instruction {}!", parts[0]))
+                return Err(format!("unrecognised instruction {}!", instr))
             }
         }
 
@@ -226,19 +270,19 @@ impl Assembler {
                 };
                 continue
             }
-            while self.counter > ret.len() {
-                ret.push(0)
-            }
-            match self.line_to_bytes(l) {
+            let instr = match self.line_to_bytes(l) {
                 Ok(bytes) => {
-                    ret.append(&mut bytes.into_vec())
+                    bytes.into_vec()
                 }
                 Err(e) => {
-                    return Err(e)
+                    return Err(format!("line {}: {}", l.program_text_line, e))
                 }
+            };
+            for b in instr {
+                set_vec_value_at_index(&mut ret, b, self.counter);
+                self.counter += 1
             }
         }
-
         
         Ok(ret.into_boxed_slice())
     }
@@ -247,10 +291,15 @@ impl Assembler {
 
         type Op = Operand;
         if line.instruction == Instruction::Dat {
-            ret.push(match line.operand {
-                Operand::Byte(b) => b,
+            match &line.operand {
+                Operand::Byte(b) => ret.push(*b),
+                Operand::ByteBlock(b) => {
+                    for byte in b.clone().into_vec() {
+                        ret.push(byte)
+                    }
+                }
                 _ => unreachable!()
-            })
+            }
         }
         else {
             let instr = line.instruction.clone() as u8;
@@ -288,7 +337,8 @@ impl Assembler {
 
 struct Line {
     pub instruction: Instruction,
-    pub operand: Operand
+    pub operand: Operand,
+    pub program_text_line: usize
 }
 enum Operand {
     None,
@@ -302,7 +352,8 @@ impl Default for Line {
     fn default() -> Line {
         Line {
             instruction: Instruction::Nop,
-            operand: Operand::None
+            operand: Operand::None,
+            program_text_line: 0
         }
     }
 }
@@ -312,58 +363,36 @@ impl Default for Line {
 enum Instruction {
     // processor ops
     // control
-    Nop,
-    Hlt,
+    Nop, Hlt,
 
     // internal register mgmt
-    Swp,
-    Tab,
-    Tax,
-    Txa,
-    Inc,
-    Dec,
+    Swp, Tab, Tax, Txa, Inc, Dec,
 
     // arithmetic
-    Add,
-    Adc,
-    Sub,
-    Sbc,
-    Lsr,
-    Lsl,
+    Add, Adc, Sub, Sbc, Lsr, Lsl,
 
     // carry
-    Clc,
-    Sec,
+    Clc, Sec,
 
     // output
-    Out,
+    Put,
 
     // stack
-    Psa,
-    Ppa,
-    Pss,
-    Pps,
-    Ssp,
-    Gsp,
+    Psa, Ppa,
+    Pss, Pps, Ssp, Gsp,
 
     // misc
-    Brk,
-    Rts,
-    LdaConst,
+    Brk, Rts, LdaConst,
 
     // wide ops
-    LdaAddr = 128,
-    StaAddr,
-    LdaAddrOffset,
-    StaAddrOffset,
-    JmpAddr,
-    JmpAddrOffset,
-    JsrAddr,
-    JsrAddrOffset,
+    LdaAddr = 128, StaAddr,
+    LdaAddrOffset, StaAddrOffset,
+    JmpAddr, JmpAddrOffset,
+    JsrAddr, JsrAddrOffset,
+    JezAddr, JezAddrOffset,
 
     // assembler directives
-    Org,
-    Dat
+    Org, Dat
 }
 
 #[cfg(test)]

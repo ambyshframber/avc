@@ -49,6 +49,7 @@ impl Processor {
         let mem = read(&po.path).unwrap();
         Self::new_with_memory(&mem)
     }
+    #[allow(dead_code)]
     pub fn readout(&self) -> String {
         let mut ret = String::new();
         ret.push_str(&format!("a :   0x{:0>2x}\n", self.a));
@@ -68,9 +69,11 @@ impl Processor {
         }
         println!("")
     }
+    #[allow(dead_code)]
     pub fn execute_once(&mut self) -> bool {
         self.execute()
     }
+    #[allow(dead_code)]
     pub fn execute_until_break(&mut self) {
         while !self.halted {
             if self.execute() {
@@ -99,6 +102,9 @@ impl Processor {
                 self.execute_wide(instr);
                 //self.program_counter += 3
             }
+        }
+        if self.a == 0 {
+            self.status |= 0b10
         }
 
         false
@@ -185,7 +191,7 @@ impl Processor {
             15 => { // sec
                 self.status |= 1
             }
-            16 => { // out
+            16 => { // put
                 let _ = self.write_buffer.write(&[self.a]);
             }
             17 => { // psa
@@ -218,10 +224,10 @@ impl Processor {
                 self.a = self.memory[self.program_counter];
                 self.program_counter += 1
             }
+            26 => { // get
+                
+            }
             _ => {} // nop
-        }
-        if self.a == 0 {
-            self.status |= 0b10
         }
     }
     fn execute_wide(&mut self, instr: u8) {
@@ -263,6 +269,16 @@ impl Processor {
                 self.push(lo);
                 self.push(hi);
                 self.program_counter = addr + self.x as usize
+            }
+            8 => { // jez hhll
+                if self.status & 0b10 != 0{
+                    self.program_counter = addr
+                }
+            }
+            9 => { // jez hhll,x
+                if self.status & 0b10 != 0{
+                    self.program_counter = addr + self.x as usize
+                }
             }
             _ => {} // nop
         }

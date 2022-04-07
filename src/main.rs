@@ -23,7 +23,10 @@ fn run_program() -> Result<(), (i32, String)> {
 
     match po.command {
         Command::Assemble => {
-            assembler::assemble(&po)
+            match assembler::assemble(&po) {
+                Ok(_) => {}
+                Err(e) => return Err((1, e))
+            }
         }
         Command::Run => {
             let mut p = Processor::new(&po);
@@ -36,6 +39,7 @@ fn run_program() -> Result<(), (i32, String)> {
 
 fn get_options() -> Options {
     let mut o = Options::default();
+    o.out_path = String::from("a.out");
 
     {
         let mut ap = ArgumentParser::new();
@@ -44,6 +48,7 @@ fn get_options() -> Options {
             .add_option(&["-A"], StoreConst(Command::Assemble), "assemble")
             .add_option(&["-R"], StoreConst(Command::Run), "run")
         ;
+        ap.refer(&mut o.out_path).add_option(&["-o"], Store, "output file path (for assembly)");
         ap.refer(&mut o.path).add_argument("file", Store, "the file to run/assemble");
 
         ap.parse_args_or_exit()
