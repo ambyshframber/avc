@@ -27,7 +27,6 @@ fn run_program() -> Result<(), (i32, String)> {
         }
         Command::Run => {
             let mut p = Processor::new(&po);
-            //println!("{}", p.memory[1]);
             p.execute_until_halt()
         }
     }

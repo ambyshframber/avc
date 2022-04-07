@@ -11,10 +11,10 @@ pub struct Options {
 }
 
 pub fn bytes_to_16(hb: u8, lb: u8) -> u16 {
-    ((hb as u16) << 15) + lb as u16
+    ((hb as u16) << 8) + lb as u16
 }
 pub fn u16_to_bytes(int: u16) -> (u8, u8) {
-    ((int >> 15) as u8, (int & 255) as u8)
+    ((int >> 8) as u8, (int & 255) as u8)
 }
 pub fn parse_int_literal(s: &str) -> Result<u16, String> {
     let radix = &s[..2];
@@ -42,4 +42,14 @@ pub fn parse_int_literal(s: &str) -> Result<u16, String> {
             return Err(format!("unsupported radix {}", radix))
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn byte_conv_tests() {
+        assert_eq!(u16_to_bytes(0b0000_1111_0000_0001), (0b0000_1111, 0b0000_0001));
+        assert_eq!(bytes_to_16(0b0000_0011, 0b0011_0011), 0b0000_0011_0011_0011)
+    }
 }

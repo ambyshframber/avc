@@ -8,7 +8,7 @@ use crate::utils::{u16_to_bytes, parse_int_literal};
 #[derive(Default)]
 struct Assembler {
     lines: Vec<Line>,
-    labels: HashMap<String, usize>,
+    pub labels: HashMap<String, usize>,
     counter: usize
 }
 
@@ -23,8 +23,14 @@ pub fn assemble(program: &str) -> Result<Box<[u8]>, String> {
             }
         }
     }
+    
     match a.compile() {
-        Ok(bytes) => Ok(bytes),
+        Ok(bytes) => {
+            for label in a.labels.keys() {
+                println!("label {}, pointing to {} at {}", label, bytes[a.labels[label]], a.labels[label])
+            }
+            Ok(bytes)
+        }
         Err(e) => Err(format!("error compiling: {}", e))
     }
 }
@@ -261,6 +267,7 @@ impl Assembler {
                 Op::Label(l) => {
                     match self.labels.get(l) {
                         Some(a) => {
+                            //dbg!(*a as u16);
                             let (hi, lo) = u16_to_bytes(*a as u16);
                             ret.push(hi);
                             ret.push(lo)
@@ -274,7 +281,6 @@ impl Assembler {
                 _ => unreachable!()
             }
         }
-        
 
         Ok(ret.into_boxed_slice())
     }

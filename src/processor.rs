@@ -89,7 +89,6 @@ impl Processor {
             self.program_counter += 1;
             return true
         }
-        //dbg!(instr);
 
         match instr & 0b1000_0000 { // msb determines instruction width
             0 => { // leading zero = single width
@@ -229,6 +228,7 @@ impl Processor {
         let op1 = self.memory[self.program_counter + 1];
         let op2 = self.memory[self.program_counter + 2];
         let addr = bytes_to_16(op1, op2) as usize;
+        //dbg!(addr);
         self.program_counter += 3;
         //dbg!(self.program_counter);
 
