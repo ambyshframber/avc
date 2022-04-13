@@ -1,4 +1,7 @@
 /target
+/.todo
 /.todoBAK
 /avc_examples/*.out
 /*.out
+/instr_decode.py
+/log

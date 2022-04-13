@@ -4,7 +4,7 @@
         dat 0
         hlt
 
-PRINT:  
+PRINT:  ; the magic of horrible unsafe code
         ppa
         sta PRDAT1
         ppa

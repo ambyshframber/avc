@@ -30,7 +30,7 @@ fn run_program() -> Result<(), (i32, String)> {
         }
         Command::Run => {
             let mut p = Processor::new(&po);
-            p.execute_until_halt()
+            p.run(&po)
         }
     }
 
@@ -49,9 +49,14 @@ fn get_options() -> Options {
             .add_option(&["-R"], StoreConst(Command::Run), "run")
         ;
         ap.refer(&mut o.out_path).add_option(&["-o"], Store, "output file path (for assembly)");
+        ap.refer(&mut o.debug_level).add_option(&["-d"], Store, "debug level. 0 is none, 1 is readout on break, 2 is 1+instructions, 3 is readout every cycle");
         ap.refer(&mut o.path).add_argument("file", Store, "the file to run/assemble");
 
         ap.parse_args_or_exit()
+    }
+    if o.debug_level > 3 {
+        println!("invalid debug level {}", o.debug_level);
+        exit(2)
     }
 
     o

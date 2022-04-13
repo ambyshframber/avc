@@ -63,34 +63,47 @@ impl Processor {
         ret
     }
 
+    pub fn run(&mut self, po: &Options) {
+        match po.debug_level {
+            0 => self.execute_until_halt(),
+            1|2 => {
+                while !self.halted {
+                    self.execute_until_break(po.debug_level == 2);
+                    println!("{}", self.readout())
+                }
+            }
+            3 => {
+                while !self.halted {
+                    self.execute(true);
+                    println!("{}", self.readout())
+                }
+            }
+            _ => unreachable!()
+        }
+    }
+
     pub fn execute_until_halt(&mut self) {
         while !self.halted {
-            self.execute();
+            self.execute(false);
         }
         println!("")
     }
-    #[allow(dead_code)]
-    pub fn execute_once(&mut self) -> bool {
-        self.execute()
-    }
-    #[allow(dead_code)]
-    pub fn execute_until_break(&mut self) {
+    pub fn execute_until_break(&mut self, print_instr: bool) {
         while !self.halted {
-            if self.execute() {
+            if self.execute(print_instr) {
                 break
             }
         }
         println!("")
     }
 
-    fn execute(&mut self) -> bool { // returns true if instr is break
+    fn execute(&mut self, print_instr: bool) -> bool { // returns true if instr is break
         if self.program_counter > u16::MAX as usize {
             self.program_counter %= u16::MAX as usize
         }
         let instr = self.memory[self.program_counter];
-        if false {
-            println!("{}", instr);
-            println!("{}", self.readout());
+        if print_instr {
+            println!("\n{}", instr)
         }
         if instr == 23 {
             self.program_counter += 1;
@@ -270,7 +283,7 @@ impl Processor {
         // indirect 1xx1_0xxx
         // indirect+offset 1xx1_1xxx (gets addr, jumps to addr at addr+x)
 
-        let addr = match instr & 0b0001_1000 {
+        /*let addr = match instr & 0b0001_1000 { // get addr
             0b0000_0000 => bytes_to_16(op1, op2),
             0b0000_1000 => bytes_to_16(op1, op2) + self.x as u16,
             _ => {
@@ -283,9 +296,22 @@ impl Processor {
                 }
                 addr
             }
-        } as usize;
+        } as usize;*/
 
-        match instr & 0b0000_0111 { // add 128 to number
+        let mut addr = if instr & 0b0001_0000 != 0 { // work smarter not harder
+            let tmp_addr = bytes_to_16(op1, op2);
+            let hb = self.memory[tmp_addr as usize];
+            let lb = self.memory[(tmp_addr + 1) as usize];
+            bytes_to_16(hb, lb)
+        }
+        else {
+            bytes_to_16(op1, op2)
+        } as usize;
+        if instr &0b1000 != 0 {
+            addr += self.x as usize
+        }
+
+        match instr & 0b0000_0111 {
             0b000 => self.a = self.memory[addr],
             0b001 => self.memory[addr] = self.a,
             0b010 => self.program_counter = addr,
