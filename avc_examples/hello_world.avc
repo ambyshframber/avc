@@ -1,12 +1,28 @@
-	jmp %PRINT
-DATA:	dat "hello world!"
-	dat 0d10
-	dat 0d0
+        jsr PRINT
+        dat "hello world!"
+        dat 10
+        dat 0
+        hlt
 
-PRINT:	lda %DATA,x
-	jez %HALT
-	put
-	inc
-	jmp %PRINT
-
-HALT:	hlt
+PRINT:  
+        ppa
+        sta PRDAT1
+        ppa
+        sta PRDAT2
+INT:    
+        lda (PRDAT1,x)
+        jez PRINT_RETURN
+        put
+        inc
+        jmp INT
+PRINT_RETURN: ; string len is in x
+        txa
+        swp ; string len is now in b
+        lda PRDAT2
+        add ; add string len to get return addr
+        psa
+        lda PRDAT1
+        psa
+        rts
+PRDAT1: dat 0 ; hi
+PRDAT2: dat 0 ; lo

@@ -88,6 +88,10 @@ impl Processor {
             self.program_counter %= u16::MAX as usize
         }
         let instr = self.memory[self.program_counter];
+        if false {
+            println!("{}", instr);
+            println!("{}", self.readout());
+        }
         if instr == 23 {
             self.program_counter += 1;
             return true
@@ -105,6 +109,9 @@ impl Processor {
         }
         if self.a == 0 {
             self.status |= 0b10
+        }
+        else {
+            self.status &= !0b10
         }
 
         false
@@ -227,57 +234,75 @@ impl Processor {
             26 => { // get
                 
             }
+            27 => { // not
+                self.a = !self.a
+            }
+            28 => { // and
+                self.a &= self.b
+            }
+            29 => { // ior
+                self.a |= self.b
+            }
+            30 => { // xor
+                self.a ^= self.b
+            }
             _ => {} // nop
         }
     }
     fn execute_wide(&mut self, instr: u8) {
         let op1 = self.memory[self.program_counter + 1];
         let op2 = self.memory[self.program_counter + 2];
-        let addr = bytes_to_16(op1, op2) as usize;
         //dbg!(addr);
         self.program_counter += 3;
         //dbg!(self.program_counter);
 
-        match instr & 0b0111_1111 { // add 128 to number
-            0 => { // lda hhll
-                self.a = self.memory[addr]
+        // for wide instructions:
+        // lda 1xxx_x000
+        // sta 1xxx_x001
+        // jmp 1xxx_x010
+        // jsr 1xxx_x011
+        // jez 1xxx_x100
+        // jgz 1xxx_x101
+
+        // addressing modes:
+        // direct 1xx0_0xxx
+        // direct+offset 1xx0_1xxx
+        // indirect 1xx1_0xxx
+        // indirect+offset 1xx1_1xxx (gets addr, jumps to addr at addr+x)
+
+        let addr = match instr & 0b0001_1000 {
+            0b0000_0000 => bytes_to_16(op1, op2),
+            0b0000_1000 => bytes_to_16(op1, op2) + self.x as u16,
+            _ => {
+                let tmp_addr = bytes_to_16(op1, op2);
+                let hb = self.memory[tmp_addr as usize];
+                let lb = self.memory[(tmp_addr + 1) as usize];
+                let mut addr = bytes_to_16(hb, lb);
+                if instr &0b1000 != 0 {
+                    addr += self.x as u16
+                }
+                addr
             }
-            1 => { // sta hhll
-                self.memory[addr] = self.a
-            }
-            2 => { // lda hhll,x
-                self.a = self.memory[addr + self.x as usize]
-            }
-            3 => { // sta hhll,x
-                self.memory[addr + self.x as usize] = self.a
-            }
-            4 => { // jmp hhll
+        } as usize;
+
+        match instr & 0b0000_0111 { // add 128 to number
+            0b000 => self.a = self.memory[addr],
+            0b001 => self.memory[addr] = self.a,
+            0b010 => self.program_counter = addr,
+            0b011 => {
+                let (hb, lb) = u16_to_bytes(self.program_counter as u16);
+                self.push(lb);
+                self.push(hb);
                 self.program_counter = addr
             }
-            5 => { // jmp hhll,x
-                self.program_counter = addr + self.x as usize
-            }
-            6 => { // jsr hhll
-                //dbg!("jsr hhll");
-                let (hi, lo) = u16_to_bytes((self.program_counter) as u16);
-                self.push(lo);
-                self.push(hi);
-                self.program_counter = addr
-            }
-            7 => { // jsr hhll,x
-                let (hi, lo) = u16_to_bytes((self.program_counter) as u16);
-                self.push(lo);
-                self.push(hi);
-                self.program_counter = addr + self.x as usize
-            }
-            8 => { // jez hhll
-                if self.status & 0b10 != 0{
+            0b100 => {
+                if self.status & 0b10 != 0 {
                     self.program_counter = addr
                 }
             }
-            9 => { // jez hhll,x
-                if self.status & 0b10 != 0{
-                    self.program_counter = addr + self.x as usize
+            0b101 => {
+                if self.a > 0 {
+                    self.program_counter = addr
                 }
             }
             _ => {} // nop
@@ -285,10 +310,12 @@ impl Processor {
     }
 
     fn push(&mut self, byte: u8) {
+        //dbg!("pushing");
         self.memory[self.stack_pointer] = byte;
         self.stack_pointer += 1
     }
     fn pop(&mut self) -> u8 {
+        //dbg!("popping");
         self.stack_pointer -= 1;
         self.memory[self.stack_pointer]
     }

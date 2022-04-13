@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use num_derive::FromPrimitive;    
+use num_traits::FromPrimitive;
 
 use crate::utils::{u16_to_bytes, parse_int_literal, set_vec_value_at_index};
 
@@ -39,6 +41,7 @@ impl Assembler {
         if s.trim() == "" {
             return Ok(())
         }
+        let s = s.split(';').next().unwrap(); // ignore comments
         let parts_initial = s.trim_start().split(':'); // split off label
         let parts = parts_initial.collect::<Vec<&str>>();
         let main_instr = if parts.len() == 2 { // if there is a label, add it
@@ -55,7 +58,7 @@ impl Assembler {
         
         self.counter += 1; // bump counter
 
-        let main_instr = main_instr.split(';').next().unwrap(); // ignore comments
+        //let main_instr = main_instr.split(';').next().unwrap(); // ignore comments
         let split_index = main_instr.find(' ');
         let (instr, op) = match split_index {
             Some(i) => {
@@ -105,149 +108,107 @@ impl Assembler {
             "brk" => line.instruction = I::Brk,
             "rts" => line.instruction = I::Rts,
             
-            "lda"|"sta"|"org"|"dat"|"blk"|"jmp"|"jsr"|"jez" => { // wide
+            "lda"|"sta"|"org"|"dat"|"jmp"|"jsr"|"jez"|"jgz" => { // wide
                 if op == "" { // check operand exists
                     return Err(format!("instr {} requires op, found none", instr))
                 }
-                let is_literal = op.starts_with('#'); // check if literal or offset
-                let is_offset = op.ends_with(",x");
-                let is_label = op.starts_with('%');
-                if is_literal && is_offset {
-                    return Err(format!("operand cannot be literal and offset!"))
-                }
+                //dbg!(op);
+                // dat "string"
+                // lda (addr,x)
+                // lda #bb
+                let is_literal = op.starts_with('#');
                 let is_string = op.starts_with('"');
-                let mut lit = if is_literal || is_label { // trim markers
-                    &op[1..]
-                }
-                else if is_string {
-                    if instr != "dat" {
-                        return Err(format!("string operand on non-dat instruction!"))
-                    }
+                let is_indirect = op.starts_with('(');
+                let mut literal = op;
+                if is_string {
                     if !op.ends_with('"') {
-                        return Err(format!("string operand without closing quote!"))
+                        return Err(String::from("string operand with no close quote!"))
                     }
-                    &op[1..op.len() - 1]
+                    else {
+                        literal = &literal[1..literal.len() - 1]
+                    }
                 }
-                else {
-                    op
-                };
+                if is_indirect {
+                    if !op.ends_with(')') {
+                        return Err(String::from("indirect address operand with no close bracket!"))
+                    }
+                    else {
+                        literal = &literal[1..literal.len() - 1]
+                    }
+                }
+                let is_offset = literal.ends_with(",x");
+                if is_literal {
+                    if instr != "lda" {
+                        return Err(String::from("literal operand not valid for non-lda instructions!"))
+                    }
+                    if is_offset {
+                        return Err(String::from("literal operand cannot be offset!"))
+                    }
+                    literal = &literal[1..];
+                }
                 if is_offset {
-                    lit = &lit[..lit.len() - 2]
+                    literal = &literal[..literal.len() - 2]
                 }
-                let operand = if is_label || is_string {
-                    0
+                //dbg!(literal);
+                let (operand, is_label) = match parse_int_literal(literal) {
+                    Ok(v) => (v, false),
+                    Err(_) => (0, true)
+                };
+                let mut instr_output = 0b1000_0000;
+                if is_literal {
+                    if is_label {
+                        return Err(String::from("literal operand failed to parse!"))
+                    }
+                    line.instruction = I::LdaConst;
+                    line.operand = Op::Byte(operand as u8);
+                    self.counter += 1
                 }
                 else {
-                    match parse_int_literal(lit) {
-                        Ok(v) => v,
-                        Err(e) => return Err(e)
-                    }
-                };
-                self.counter += 1; // bump counter
-                match instr {
-                    "lda" => {
-                        if is_literal {
-                            line.instruction = I::LdaConst;
-                            line.operand = Op::Byte(operand as u8);
+                    match instr {
+                        "org" => {
+                            instr_output = I::Org as u8;
+                            line.operand = Op::Addr(operand);
+                            self.counter = operand as usize;
                         }
-                        else {
-                            if is_offset {
-                                line.instruction = I::LdaAddrOffset
+                        "dat" => {
+                            instr_output = I::Dat as u8;
+                            if is_string {
+                                let bytes = literal.bytes().collect::<Vec<u8>>();
+                                self.counter += bytes.len() - 1; // i don't know why the -1 is needed, but it is.
+                                line.operand = Op::ByteBlock(bytes.into_boxed_slice())
                             }
                             else {
-                                line.instruction = I::LdaAddr
+                                line.operand = Op::Byte(operand as u8);
                             }
+                        }
+                        _ => {
+                            self.counter += 2;
+                            instr_output |= match instr {
+                                "lda" => 0b000,
+                                "sta" => 0b001,
+                                "jmp" => 0b010,
+                                "jsr" => 0b011,
+                                "jez" => 0b100,
+                                "jgz" => 0b101,
+                                _ => unreachable!()
+                            };
                             if is_label {
-                                line.operand = Op::Label(String::from(lit))
+                                line.operand = Op::Label(String::from(literal))
                             }
                             else {
-                                line.operand = Op::Addr(operand);
+                                line.operand = Op::Addr(operand)
                             }
-                            self.counter += 1; // bump counter
+                            if is_offset {
+                                instr_output |= 0b1000
+                            }
+                            if is_indirect {
+                                instr_output |= 0b1_0000
+                            }
                         }
                     }
-                    "sta" => {
-                        if is_offset {
-                            line.instruction = I::StaAddrOffset
-                        }
-                        else {
-                            line.instruction = I::StaAddr
-                        }
-                        if is_label {
-                            line.operand = Op::Label(String::from(lit))
-                        }
-                        else {
-                            line.operand = Op::Addr(operand);
-                        }
-                        self.counter += 1; // bump counter
-                    }
-                    "jmp" => {
-                        if is_offset {
-                            line.instruction = I::JmpAddrOffset
-                        }
-                        else {
-                            line.instruction = I::JmpAddr
-                        }
-                        if is_label {
-                            line.operand = Op::Label(String::from(lit))
-                        }
-                        else {
-                            line.operand = Op::Addr(operand);
-                        }
-                        self.counter += 1; // bump counter
-                    }
-                    "jsr" => {
-                        if is_offset {
-                            line.instruction = I::JsrAddrOffset
-                        }
-                        else {
-                            line.instruction = I::JsrAddr
-                        }
-                        if is_label {
-                            line.operand = Op::Label(String::from(lit))
-                        }
-                        else {
-                            line.operand = Op::Addr(operand);
-                        }
-                        self.counter += 1; // bump counter
-                    }
-                    "jez" => {
-                        if is_offset {
-                            line.instruction = I::JezAddrOffset
-                        }
-                        else {
-                            line.instruction = I::JezAddr
-                        }
-                        if is_label {
-                            line.operand = Op::Label(String::from(lit))
-                        }
-                        else {
-                            line.operand = Op::Addr(operand);
-                        }
-                        self.counter += 1; // bump counter
-                    }
-                
-                    "org" => {
-                        line.instruction = I::Org;
-                        line.operand = Op::Addr(operand);
-                        self.counter = operand as usize;
-                    }
-                    "dat" => {
-                        line.instruction = I::Dat;
-                        if is_string {
-                            let bytes = lit.bytes().collect::<Vec<u8>>();
-                            self.counter += bytes.len() - 1; // i don't know why the -1 is needed, but it is.
-                            line.operand = Op::ByteBlock(bytes.into_boxed_slice())
-                        }
-                        else {
-                            line.operand = Op::Byte(operand as u8);
-                        }
-                        self.counter -= 1
-                    }
-                    _ => {
-                        unreachable!()
-                    }
+                    line.instruction = FromPrimitive::from_u8(instr_output).unwrap()
                 }
+
             }
             _ => {
                 return Err(format!("unrecognised instruction {}!", instr))
@@ -359,7 +320,7 @@ impl Default for Line {
 }
 
 #[repr(u8)]
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, FromPrimitive)]
 enum Instruction {
     // processor ops
     // control
@@ -382,14 +343,20 @@ enum Instruction {
     Pss, Pps, Ssp, Gsp,
 
     // misc
-    Brk, Rts, LdaConst,
+    Brk, Rts, LdaConst, Get,
+
+    // bitwise
+    Not, And, Ior, Xor,
 
     // wide ops
-    LdaAddr = 128, StaAddr,
-    LdaAddrOffset, StaAddrOffset,
-    JmpAddr, JmpAddrOffset,
-    JsrAddr, JsrAddrOffset,
-    JezAddr, JezAddrOffset,
+    LdaAddr = 0b1000_0000,
+    StaAddr, JmpAddr, JsrAddr, JezAddr, JgzAddr,
+    LdaAddrOffset = 0b1000_1000,
+    StaAddrOffset, JmpAddrOffset, JsrAddrOffset, JezAddrOffset, JgzAddrOffset,
+    LdaInd = 0b1001_0000,
+    StaInd, JmpInd, JsrInd, JezInd, JgzInd, 
+    LdaIndOffset = 0b1001_1000,
+    StaIndOffset, JmpIndOffset, JsrIndOffset, JezIndOffset, JgzIndOffset, 
 
     // assembler directives
     Org, Dat

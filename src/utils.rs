@@ -18,6 +18,13 @@ pub fn u16_to_bytes(int: u16) -> (u8, u8) {
     ((int >> 8) as u8, (int & 255) as u8)
 }
 pub fn parse_int_literal(s: &str) -> Result<u16, String> {
+    match s.parse::<u16>() {
+        Ok(v) => return Ok(v),
+        Err(_) => {}
+    }
+    if s.len() < 3 {
+        return Err(format!("literal {} too short", s))
+    }
     let radix = &s[..2];
     let literal = &s[2..];
     Ok(match radix {
@@ -58,5 +65,13 @@ mod tests {
     fn byte_conv_tests() {
         assert_eq!(u16_to_bytes(0b0000_1111_0000_0001), (0b0000_1111, 0b0000_0001));
         assert_eq!(bytes_to_16(0b0000_0011, 0b0011_0011), 0b0000_0011_0011_0011)
+    }
+
+    #[test]
+    fn int_parse() {
+        assert_eq!(parse_int_literal("0d123"), Ok(123));
+        assert_eq!(parse_int_literal("0x123"), Ok(0x123));
+        assert_eq!(parse_int_literal("0b123"), Err(String::from("binary literal 0b123 failed to parse")));
+        assert_eq!(parse_int_literal("123"), Ok(123));
     }
 }
