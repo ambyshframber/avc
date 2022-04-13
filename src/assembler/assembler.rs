@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use num_derive::FromPrimitive;    
 use num_traits::FromPrimitive;
 
-use crate::utils::{u16_to_bytes, parse_int_literal, set_vec_value_at_index};
+use crate::utils::{u16_to_bytes, parse_int_literal, set_vec_value_at_index, strip_whitespace};
 
 // parse program into Lines
 // 
@@ -59,8 +59,8 @@ impl Assembler {
         self.counter += 1; // bump counter
 
         //let main_instr = main_instr.split(';').next().unwrap(); // ignore comments
-        let split_index = main_instr.find(' ');
-        let (instr, op) = match split_index {
+        let split_index = main_instr.find(' '); // find space
+        let (instr, op) = match split_index { // split at space
             Some(i) => {
                 main_instr.split_at(i)
             }
@@ -275,15 +275,34 @@ impl Assembler {
                     ret.push(*b)
                 }
                 Op::Label(l) => {
-                    match self.labels.get(l) {
+                    // ARITHMETIC HERE
+                    let label_strip = strip_whitespace(l);
+                    let mut label = label_strip.as_str();
+                    let addition = if l.contains(['+', '-']) { // split on either
+                        let is_subtraction = l.contains('-'); // check if it's neg
+                        let mut split = label.split(['+', '-']);
+                        label = split.next().unwrap(); // string is not empty (i checked)
+                        match split.next() {
+                            Some(v) => {
+                                match parse_int_literal::<i32>(v) {
+                                    Ok(v) => v * if is_subtraction {-1} else {1},
+                                    Err(e) => return Err(e)
+                                }
+                            }
+                            None => return Err(format!("no value found after const additon: {}", l))
+                        }
+                    }
+                    else {0};
+
+                    match self.labels.get(label) {
                         Some(a) => {
                             //dbg!(*a as u16);
-                            let (hi, lo) = u16_to_bytes(*a as u16);
+                            let (hi, lo) = u16_to_bytes(((*a as i32) + addition) as u16);
                             ret.push(hi);
                             ret.push(lo)
                         }
                         None => {
-                            return Err(format!("unrecognised label {}", l))
+                            return Err(format!("unrecognised label {}", label))
                         }
                     }
                 }

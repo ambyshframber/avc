@@ -1,3 +1,5 @@
+use num_traits::Num;
+
 #[derive(Clone)]
 pub enum Command {
     Assemble,
@@ -18,8 +20,8 @@ pub fn bytes_to_16(hb: u8, lb: u8) -> u16 {
 pub fn u16_to_bytes(int: u16) -> (u8, u8) {
     ((int >> 8) as u8, (int & 255) as u8)
 }
-pub fn parse_int_literal(s: &str) -> Result<u16, String> {
-    match s.parse::<u16>() {
+pub fn parse_int_literal<T: Num>(s: &str) -> Result<T, String> {
+    match T::from_str_radix(s, 10) {
         Ok(v) => return Ok(v),
         Err(_) => {}
     }
@@ -30,19 +32,19 @@ pub fn parse_int_literal(s: &str) -> Result<u16, String> {
     let literal = &s[2..];
     Ok(match radix {
         "0b" => {
-            match u16::from_str_radix(literal, 2) {
+            match T::from_str_radix(literal, 2) {
                 Ok(i) => i,
                 Err(_) => return Err(format!("binary literal {} failed to parse", s))
             }
         }
         "0d" => {
-            match u16::from_str_radix(literal, 10) {
+            match T::from_str_radix(literal, 10) {
                 Ok(i) => i,
                 Err(_) => return Err(format!("decimal literal {} failed to parse", s))
             }
         }
         "0x" => {
-            match u16::from_str_radix(literal, 16) {
+            match T::from_str_radix(literal, 16) {
                 Ok(i) => i,
                 Err(_) => return Err(format!("hex literal {} failed to parse", s))
             }
@@ -59,6 +61,16 @@ pub fn set_vec_value_at_index<T: Default>(vec: &mut Vec<T>, val: T, index: usize
     vec[index] = val
 }
 
+pub fn strip_whitespace(s: &str) -> String {
+    let mut ret = String::new();
+    for c in s.chars() {
+        if c != ' ' {
+            ret.push(c)
+        }
+    }
+    ret
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,7 +84,7 @@ mod tests {
     fn int_parse() {
         assert_eq!(parse_int_literal("0d123"), Ok(123));
         assert_eq!(parse_int_literal("0x123"), Ok(0x123));
-        assert_eq!(parse_int_literal("0b123"), Err(String::from("binary literal 0b123 failed to parse")));
+        assert_eq!(parse_int_literal::<i32>("0b123"), Err(String::from("binary literal 0b123 failed to parse")));
         assert_eq!(parse_int_literal("123"), Ok(123));
     }
 }

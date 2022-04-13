@@ -6,11 +6,11 @@
 
 PRINT:  ; the magic of horrible unsafe code
         ppa
-        sta PRDAT1
+        sta PRDAT
         ppa
-        sta PRDAT2
+        sta PRDAT+1
 INT:    
-        lda (PRDAT1,x)
+        lda (PRDAT,x)
         jez PRINT_RETURN
         put
         inc
@@ -18,11 +18,12 @@ INT:
 PRINT_RETURN: ; string len is in x
         txa
         swp ; string len is now in b
-        lda PRDAT2
+        lda PRDAT+1
         add ; add string len to get return addr
         psa
-        lda PRDAT1
+        lda PRDAT
         psa
         rts
-PRDAT1: dat 0 ; hi
-PRDAT2: dat 0 ; lo
+PRDAT: 
+        dat 0 ; hi
+        dat 0 ; lo
