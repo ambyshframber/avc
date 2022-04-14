@@ -10,7 +10,7 @@ PRINT:  ; the magic of horrible unsafe code
         ppa
         sta PRDAT+1
 INT:    
-        lda (PRDAT,x)
+        lda (PRDAT),x
         jez PRINT_RETURN
         put
         inc

@@ -1,5 +1,5 @@
 [package]
-name = "aja_vrt_cpu"
+name = "avc_asm"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,3 +9,4 @@ edition = "2021"
 argparse = "0.2.2"
 num-traits = "0.2"
 num-derive = "0.2"
+termion = "1.5.6"

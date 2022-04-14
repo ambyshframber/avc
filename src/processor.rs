@@ -1,5 +1,8 @@
-use std::io::{Write, stdout};
+use std::io::{Write, stdout, Read};
 use std::fs::read;
+use std::num::Wrapping;
+
+use termion::{AsyncReader, async_stdin};
 
 use crate::utils::{bytes_to_16, u16_to_bytes, Options};
 
@@ -12,7 +15,9 @@ pub struct Processor {
     pub status: u8,
     pub halted: bool,
     pub stack_pointer: usize, // see note on pc
-    pub write_buffer: Box<dyn Write>
+    pub write_buffer: Box<dyn Write>,
+    pub reader: AsyncReader,
+    pub get_buffer: Vec<u8>
 }
 
 /// status flags:
@@ -33,6 +38,8 @@ impl Default for Processor {
             halted: false,
             stack_pointer: 0,
             write_buffer: Box::new(stdout()),
+            reader: async_stdin(),
+            get_buffer: Vec::new()
         }
     }
 }
@@ -57,7 +64,7 @@ impl Processor {
         ret.push_str(&format!("x :   0x{:0>2x}\n", self.x));
         ret.push_str(&format!("pc: 0x{:0>4x}\n", self.program_counter));
         ret.push_str(&format!("sp: 0x{:0>4x}\n", self.stack_pointer));
-        ret.push_str(&format!("      -----nzc\n"));
+        ret.push_str(&format!("      ------zc\n"));
         ret.push_str(&format!("s : 0b{:0>8b}\n", self.status));
 
         ret
@@ -95,6 +102,10 @@ impl Processor {
             }
         }
         println!("")
+    }
+
+    fn update_input_buf(&mut self) {
+        self.reader.read_to_end(&mut self.get_buffer).unwrap();
     }
 
     fn execute(&mut self, print_instr: bool) -> bool { // returns true if instr is break
@@ -149,37 +160,41 @@ impl Processor {
                 self.a = self.x
             }
             6 => { // inc
-                self.x += 1
+                if self.x == 255 { self.x = 0 }
+                else { self.x += 1 }
             }
             7 => { // dec
-                self.x -= 1
+                if self.x == 0 { self.x = 255 }
+                else { self.x -= 1 }
             }
             8 => { // add
-                let mut result = self.a as u16 + self.b as u16;
+                let mut result = self.a as u16 + self.b as u16 + (self.status & 1) as u16;
                 if result > 255 {
                     self.status |= 0b1;
                     result &= 255
                 }
+                else {
+                    self.status &= !1
+                }
                 self.a = result as u8
             }
-            9 => { // adc
+            /*9 => { // adc
                 let result = self.a as u16 + self.b as u16 + (self.status & 1) as u16;
                 self.status &= !1;
                 if result & 255 != 0 {
                     self.status |= 0b1
                 }
                 self.a = result as u8
-            }
-            10 => { // sub
+            }*/
+            /*10 => { // sub
                 if self.a >= self.b {
                     self.a = self.a - self.b
                 }
                 else {
                     self.a = self.b - self.a;
-                    self.status |= 0b100
                 }
-            }
-            11 => { // sbc
+            }*/
+            /*11 => { // sbc
                 let a = self.a as u16;
                 let b = self.b as u16;
                 if a >= b {
@@ -190,20 +205,21 @@ impl Processor {
                 else {
                     self.a = (b - a) as u8;
                     self.a += self.status & 1;
-                    self.status |= 0b100
                 }
-            }
+            }*/
             12 => { // lsr
-                if self.a & 128 != 0 {
-                    self.status |= 0b1
-                }
-                self.a <<= 1
+                let carry = self.status & 1;
+                if self.a & 128 != 0 { self.status |= 0b1 }
+                else { self.status &= !1 }
+                self.a <<= 1;
+                self.a += carry
             }
             13 => { // lsl
-                if self.a & 1 != 0 {
-                    self.status |= 1
-                }
-                self.a >>= 1
+                let carry = (self.status & 1) * 128;
+                if self.a & 1 != 0 { self.status |= 0b1 }
+                else { self.status &= !1 }
+                self.a >>= 1;
+                self.a += carry
             }
             14 => { // clc
                 self.status &= !1
@@ -220,11 +236,11 @@ impl Processor {
             18 => { // ppa
                 self.a = self.pop()
             }
-            19 => { // pss
-                self.push(self.status)
+            19 => { // gst
+                self.a = self.status
             }
-            20 => { // pps
-                self.status = self.pop()
+            20 => { // sst
+                self.status = self.a
             }
             21 => { // ssp
                 self.stack_pointer = bytes_to_16(self.a, self.b) as usize
@@ -234,6 +250,7 @@ impl Processor {
             }
             23 => { // brk
                 unreachable!() // debugging breakpoint
+                // earlier code should skip the cycle
             }
             24 => { // rts
                 let hi = self.pop();
@@ -245,7 +262,11 @@ impl Processor {
                 self.program_counter += 1
             }
             26 => { // get
-                
+                self.update_input_buf();
+                self.a = if self.get_buffer.len() > 0 {
+                    self.get_buffer.remove(0)
+                }
+                else {0}
             }
             27 => { // not
                 self.a = !self.a
@@ -258,6 +279,10 @@ impl Processor {
             }
             30 => { // xor
                 self.a ^= self.b
+            }
+            31 => { // gbf
+                self.update_input_buf();
+                self.a = self.get_buffer.len() as u8
             }
             _ => {} // nop
         }

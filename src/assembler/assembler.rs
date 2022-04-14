@@ -42,6 +42,9 @@ impl Assembler {
             return Ok(())
         }
         let s = s.split(';').next().unwrap(); // ignore comments
+        if s.trim() == "" {
+            return Ok(())
+        }
         let parts_initial = s.trim_start().split(':'); // split off label
         let parts = parts_initial.collect::<Vec<&str>>();
         let main_instr = if parts.len() == 2 { // if there is a label, add it
@@ -79,7 +82,7 @@ impl Assembler {
         let mut line = Line {
             instruction: I::Nop,
             operand: Op::None,
-            program_text_line: index
+            program_text_line: index + 1
         };
         match instr {
             "nop" => line.instruction = I::Nop,
@@ -91,9 +94,9 @@ impl Assembler {
             "inc" => line.instruction = I::Inc,
             "dec" => line.instruction = I::Dec,
             "add" => line.instruction = I::Add,
-            "adc" => line.instruction = I::Adc,
-            "sub" => line.instruction = I::Sub,
-            "sbc" => line.instruction = I::Sbc,
+            //"adc" => line.instruction = I::Adc,
+            //"sub" => line.instruction = I::Sub,
+            //"sbc" => line.instruction = I::Sbc,
             "lsr" => line.instruction = I::Lsr,
             "lsl" => line.instruction = I::Lsl,
             "clc" => line.instruction = I::Clc,
@@ -101,14 +104,16 @@ impl Assembler {
             "put" => line.instruction = I::Put,
             "psa" => line.instruction = I::Psa,
             "ppa" => line.instruction = I::Ppa,
-            "pss" => line.instruction = I::Pss,
-            "pps" => line.instruction = I::Pps,
+            //"sst" => line.instruction = I::Sst,
+            //"gst" => line.instruction = I::Sst,
             "ssp" => line.instruction = I::Ssp,
             "gsp" => line.instruction = I::Gsp,
             "brk" => line.instruction = I::Brk,
             "rts" => line.instruction = I::Rts,
+            "get" => line.instruction = I::Get,
+            "gbf" => line.instruction = I::Gbf,
             
-            "lda"|"sta"|"org"|"dat"|"jmp"|"jsr"|"jez"|"jgz" => { // wide
+            "lda"|"sta"|"org"|"dat"|"jmp"|"jsr"|"jez" => { // jgz is gone :crab: :crab:
                 if op == "" { // check operand exists
                     return Err(format!("instr {} requires op, found none", instr))
                 }
@@ -116,26 +121,8 @@ impl Assembler {
                 // dat "string"
                 // lda (addr,x)
                 // lda #bb
-                let is_literal = op.starts_with('#');
-                let is_string = op.starts_with('"');
-                let is_indirect = op.starts_with('(');
                 let mut literal = op;
-                if is_string {
-                    if !op.ends_with('"') {
-                        return Err(String::from("string operand with no close quote!"))
-                    }
-                    else {
-                        literal = &literal[1..literal.len() - 1]
-                    }
-                }
-                if is_indirect {
-                    if !op.ends_with(')') {
-                        return Err(String::from("indirect address operand with no close bracket!"))
-                    }
-                    else {
-                        literal = &literal[1..literal.len() - 1]
-                    }
-                }
+                let is_literal = literal.starts_with('#');
                 let is_offset = literal.ends_with(",x");
                 if is_literal {
                     if instr != "lda" {
@@ -148,6 +135,24 @@ impl Assembler {
                 }
                 if is_offset {
                     literal = &literal[..literal.len() - 2]
+                }
+                let is_string = literal.starts_with('"');
+                let is_indirect = literal.starts_with('(');
+                if is_string {
+                    if !literal.ends_with('"') {
+                        return Err(String::from("string operand with no close quote!"))
+                    }
+                    else {
+                        literal = &literal[1..literal.len() - 1]
+                    }
+                }
+                if is_indirect {
+                    if !literal.ends_with(')') {
+                        return Err(String::from("indirect address operand with no close bracket!"))
+                    }
+                    else {
+                        literal = &literal[1..literal.len() - 1]
+                    }
                 }
                 //dbg!(literal);
                 let (operand, is_label) = match parse_int_literal(literal) {
@@ -359,13 +364,16 @@ enum Instruction {
 
     // stack
     Psa, Ppa,
-    Pss, Pps, Ssp, Gsp,
+    Sst, Gst, // DEPRECATED
+    Ssp, Gsp,
 
     // misc
     Brk, Rts, LdaConst, Get,
 
     // bitwise
     Not, And, Ior, Xor,
+
+    Gbf,
 
     // wide ops
     LdaAddr = 0b1000_0000,

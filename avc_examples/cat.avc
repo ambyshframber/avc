@@ -1,0 +1,14 @@
+        ;lda #100
+        ;ssp
+LOOP:
+        gbf ; check if there's text buffered
+        jez LOOP
+        get ; get char
+        swp ; put char in b
+        lda #0x68 ; put h in a
+        sub
+        jez HALT ; check if char = 10
+        swp ; put char back in a
+        put
+        jmp LOOP
+HALT:   hlt
