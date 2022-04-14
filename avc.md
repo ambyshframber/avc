@@ -80,6 +80,8 @@ Bit 0 of the status register is the carry or "inverse borrow" flag, similar to t
 
 `jez`: Jump if the zero flag is set.
 
+`jgt`: Jump if `a` is greater than `b`.
+
 `jsr`: Push the value of the program counter to the stack (lo-byte first) and then jump to the specified address.
 
 `rts`: Pop the program counter from the stack (hi-byte first) and jump to it.

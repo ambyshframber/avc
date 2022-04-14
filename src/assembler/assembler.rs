@@ -112,8 +112,12 @@ impl Assembler {
             "rts" => line.instruction = I::Rts,
             "get" => line.instruction = I::Get,
             "gbf" => line.instruction = I::Gbf,
+            "not" => line.instruction = I::Not,
+            "and" => line.instruction = I::And,
+            "ior" => line.instruction = I::Ior,
+            "xor" => line.instruction = I::Xor,
             
-            "lda"|"sta"|"org"|"dat"|"jmp"|"jsr"|"jez" => { // jgz is gone :crab: :crab:
+            "lda"|"sta"|"org"|"dat"|"jmp"|"jsr"|"jez"|"jgt" => { // jgz is gone :crab: :crab:
                 if op == "" { // check operand exists
                     return Err(format!("instr {} requires op, found none", instr))
                 }
@@ -159,7 +163,6 @@ impl Assembler {
                     Ok(v) => (v, false),
                     Err(_) => (0, true)
                 };
-                let mut instr_output = 0b1000_0000;
                 if is_literal {
                     if is_label {
                         return Err(String::from("literal operand failed to parse!"))
@@ -169,6 +172,7 @@ impl Assembler {
                     self.counter += 1
                 }
                 else {
+                    let mut instr_output = 0b1000_0000;
                     match instr {
                         "org" => {
                             instr_output = I::Org as u8;
@@ -194,7 +198,7 @@ impl Assembler {
                                 "jmp" => 0b010,
                                 "jsr" => 0b011,
                                 "jez" => 0b100,
-                                "jgz" => 0b101,
+                                "jgt" => 0b101,
                                 _ => unreachable!()
                             };
                             if is_label {
@@ -377,13 +381,13 @@ enum Instruction {
 
     // wide ops
     LdaAddr = 0b1000_0000,
-    StaAddr, JmpAddr, JsrAddr, JezAddr, JgzAddr,
+    StaAddr, JmpAddr, JsrAddr, JezAddr, JgtAddr,
     LdaAddrOffset = 0b1000_1000,
-    StaAddrOffset, JmpAddrOffset, JsrAddrOffset, JezAddrOffset, JgzAddrOffset,
+    StaAddrOffset, JmpAddrOffset, JsrAddrOffset, JezAddrOffset, JgtAddrOffset,
     LdaInd = 0b1001_0000,
-    StaInd, JmpInd, JsrInd, JezInd, JgzInd, 
+    StaInd, JmpInd, JsrInd, JezInd, JgtInd, 
     LdaIndOffset = 0b1001_1000,
-    StaIndOffset, JmpIndOffset, JsrIndOffset, JezIndOffset, JgzIndOffset, 
+    StaIndOffset, JmpIndOffset, JsrIndOffset, JezIndOffset, JgtIndOffset, 
 
     // assembler directives
     Org, Dat

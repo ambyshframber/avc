@@ -4,7 +4,7 @@ use crate::utils::Options;
 
 mod assembler;
 
-pub fn assemble(po: &Options) -> Result<(), String> {
+pub fn assemble(po: &Options) -> Result<Box<[u8]>, String> {
     let program = match read_to_string(&po.path) {
         Ok(s) => s,
         Err(_) => return Err(format!("unable to read file {}", po.path))
@@ -13,8 +13,8 @@ pub fn assemble(po: &Options) -> Result<(), String> {
         Ok(a) => a,
         Err(e) => return Err(e)
     };
-    match write(&po.out_path, assembly) {
-        Ok(_) => Ok(()),
+    match write(&po.out_path, &assembly) {
+        Ok(_) => Ok(assembly),
         Err(_) => Err(format!("unable to write file {}", po.out_path))
     }
 }

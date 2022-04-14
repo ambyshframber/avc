@@ -4,9 +4,9 @@ avc_asm is a command line assembler and virtual machine for the AVC instruction 
 
 ## PROGRAM ARGUMENTS
 
-`avc -{A|R} [OPTIONS] FILE` 
+`avc -{a|r|R} [OPTIONS] FILE` 
 
-`-A` assembles a source file. `-R` runs an assembled binary file. `FILE` is the file to operate on.
+`-a` assembles a source file. `-r` runs an assembled binary file. `-R` assembles and immediately runs a source file. `FILE` is the file to operate on.
 
 Other options are:
 

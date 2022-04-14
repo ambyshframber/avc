@@ -3,7 +3,8 @@ use num_traits::Num;
 #[derive(Clone)]
 pub enum Command {
     Assemble,
-    Run
+    Run,
+    AssAndRun,
 }
 impl Default for Command { fn default() -> Self { Self::Run } }
 #[derive(Default)]

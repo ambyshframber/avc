@@ -32,6 +32,14 @@ fn run_program() -> Result<(), (i32, String)> {
             let mut p = Processor::new(&po);
             p.run(&po)
         }
+        Command::AssAndRun => {
+            let prog = match assembler::assemble(&po) {
+                Ok(p) => p,
+                Err(e) => return Err((1, e))
+            };
+            let mut p = Processor::new_with_memory(&prog);
+            p.run(&po)
+        }
     }
 
     Ok(())
@@ -45,8 +53,10 @@ fn get_options() -> Options {
         let mut ap = ArgumentParser::new();
         
         ap.refer(&mut o.command)
-            .add_option(&["-A"], StoreConst(Command::Assemble), "assemble")
-            .add_option(&["-R"], StoreConst(Command::Run), "run")
+            .add_option(&["-a"], StoreConst(Command::Assemble), "assemble")
+            .add_option(&["-r"], StoreConst(Command::Run), "run")
+            .add_option(&["-R"], StoreConst(Command::AssAndRun), "assemble and run")
+            .required()
         ;
         ap.refer(&mut o.out_path).add_option(&["-o"], Store, "Output file path (for assembly)");
         ap.refer(&mut o.debug_level).add_option(&["-d"], Store, "Debug level. 0 is none, 1 is readout on break, 2 is 1+instructions, 3 is readout every cycle");

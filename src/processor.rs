@@ -300,7 +300,7 @@ impl Processor {
         // jmp 1xxx_x010
         // jsr 1xxx_x011
         // jez 1xxx_x100
-        // jgz 1xxx_x101
+        // jgt 1xxx_x101
 
         // addressing modes:
         // direct 1xx0_0xxx
@@ -352,7 +352,7 @@ impl Processor {
                 }
             }
             0b101 => {
-                if self.a > 0 {
+                if self.a > self.b {
                     self.program_counter = addr
                 }
             }
