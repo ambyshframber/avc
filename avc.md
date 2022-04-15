@@ -98,7 +98,7 @@ Bit 0 of the status register is the carry or "inverse borrow" flag, similar to t
 
 `get`: Read a byte from the input buffer into `a`. If the buffer is empty, 0 will be written. The buffer is updated every time a newline is sent.
 
-`gbf`: Get the length of the current input buffer and copy it into `a`.
+`gbf`: Get the length of the current input buffer and copy it into `a`. If the length is greater than 255, the carry flag is set.
 
 `brk`: Specifies a debugging breakpoint for the simulation.
 
@@ -106,7 +106,7 @@ Bit 0 of the status register is the carry or "inverse borrow" flag, similar to t
 
 AVC supports offset and indirect addressing for all instructions that use addressing, as well as literal addressing for `lda` only. It uses big-endian ordering.
 
-By default, the address given in the assembly code is placed after the instruction, and is used directly by the instruction. `lda 0x0300` will cause the processor to load the byte at `0x0300`.jk
+By default, the address given in the assembly code is placed after the instruction, and is used directly by the instruction. `lda 0x0300` will cause the processor to load the byte at `0x0300`.
 
 Offset addressing is signified by placing `,x` after the address (for example, `lda 0x0300,x`). This offsets the address by the unsigned value of x.
 
@@ -129,7 +129,7 @@ lda #200
 
 will position `lda #200` at the address 0x0300. All further instructions will follow on from this position.
 
-`dat` places an integer or string literal in the binary. Strings are encoded using ASCII and are not zero-terminated by default.
+`dat` places a byte (`dat 0x10`) or string literal (`dat "string"`) in the binary. Strings are encoded using ASCII and are not zero-terminated by default.
 
 Labels can be created by placing `LABEL:` at the start of a line, where `LABEL` is the name of the label. These can then be later referenced by any instruction that uses an address, and can be offset and indirected as normal. When referenced, labels can be manipulated using simple arithmetic, evaluated at compile-time. A `+` or `-` may be applied, followed by an integer literal (see below).
 

@@ -1,0 +1,7 @@
+#DEFINE beans 15
+#MACRO sub
+    sec
+    not
+    add
+#ENDMAC
+#ENDDECS

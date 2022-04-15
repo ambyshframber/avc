@@ -76,7 +76,7 @@ pub fn strip_whitespace(s: &str) -> String {
 mod tests {
     use super::*;
     #[test]
-    fn byte_conv_tests() {
+    fn byte_conv() {
         assert_eq!(u16_to_bytes(0b0000_1111_0000_0001), (0b0000_1111, 0b0000_0001));
         assert_eq!(bytes_to_16(0b0000_0011, 0b0011_0011), 0b0000_0011_0011_0011)
     }

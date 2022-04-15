@@ -1,8 +1,8 @@
 use std::io::{Write, stdout, Read};
 use std::fs::read;
-use std::num::Wrapping;
+//use std::num::Wrapping;
 
-use termion::{AsyncReader, async_stdin};
+use termion::async_stdin;
 
 use crate::utils::{bytes_to_16, u16_to_bytes, Options};
 
@@ -16,7 +16,7 @@ pub struct Processor {
     pub halted: bool,
     pub stack_pointer: usize, // see note on pc
     pub write_buffer: Box<dyn Write>,
-    pub reader: AsyncReader,
+    pub reader: Box<dyn Read>,
     pub get_buffer: Vec<u8>
 }
 
@@ -38,7 +38,7 @@ impl Default for Processor {
             halted: false,
             stack_pointer: 0,
             write_buffer: Box::new(stdout()),
-            reader: async_stdin(),
+            reader: Box::new(async_stdin()),
             get_buffer: Vec::new()
         }
     }
@@ -229,6 +229,7 @@ impl Processor {
             }
             16 => { // put
                 let _ = self.write_buffer.write(&[self.a]);
+                self.write_buffer.flush().unwrap()
             }
             17 => { // psa
                 self.push(self.a)
@@ -282,7 +283,10 @@ impl Processor {
             }
             31 => { // gbf
                 self.update_input_buf();
-                self.a = self.get_buffer.len() as u8
+                self.a = self.get_buffer.len() as u8;
+                if self.get_buffer.len() > 255 {
+                    self.status |= 1
+                }
             }
             _ => {} // nop
         }

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use num_derive::FromPrimitive;    
+
+use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
 use crate::utils::{u16_to_bytes, parse_int_literal, set_vec_value_at_index, strip_whitespace};
@@ -11,22 +12,55 @@ use crate::utils::{u16_to_bytes, parse_int_literal, set_vec_value_at_index, stri
 struct Assembler {
     lines: Vec<Line>,
     pub labels: HashMap<String, usize>,
-    counter: usize
+    counter: usize,
+    pub constants: HashMap<String, u8>,
+    macros: HashMap<String, Vec<Line>>
 }
 
 pub fn assemble(program: &str) -> Result<Box<[u8]>, String> {
     let mut a = Assembler::default();
 
-    for (i, l) in program.split('\n').enumerate() {
+    let mut lines = program.split('\n').peekable();
+    let mut i = 1;
+
+    let mut declarations = Vec::new();
+    if lines.peek().unwrap().starts_with('#') {
+        loop { // PASS 1: define/macro parsing
+            let l = lines.next().unwrap();
+            if l == "#ENDDECS" {
+                i += 1;
+                break
+            }
+            declarations.push(l);
+            i += 1;
+        }
+    }
+    if declarations.len() != 0 {
+        println!("found declarations:");
+        for d in declarations {
+            println!("\t{}", d)
+        }
+    }
+
+    loop { // PASS 2: line parsing
+        let l = match lines.next() {
+            Some(l) => l,
+            None => break
+        };
         match a.read_line(l, i) {
-            Ok(_) => {}
+            Ok(opt) => {
+                match opt {
+                    Some(l) => a.lines.push(l),
+                    None => {}
+                }
+            }
             Err(e) => {
                 return Err(format!("error on line {}: {}", i + 1, e))
             }
         }
     }
     
-    match a.compile() {
+    match a.compile() { // PASS 3: compiling
         Ok(bytes) => {
             for label in a.labels.keys() {
                 println!("label {}, pointing to {} at {}", label, bytes[a.labels[label]], a.labels[label])
@@ -37,21 +71,28 @@ pub fn assemble(program: &str) -> Result<Box<[u8]>, String> {
     }
 }
 impl Assembler {
-    pub fn read_line(&mut self, s: &str, index: usize) -> Result<(), String> { // index is line number. this is the worst way of doing it, i know
-        if s.trim() == "" {
-            return Ok(())
+    pub fn read_line(&mut self, s: &str, index: usize) -> Result<Option<Line>, String> { // index is line number. this is the worst way of doing it, i know
+        let s = s.trim();
+        if s == "" { // ignore empty strings
+            return Ok(None)
+        }
+        if s.starts_with('#') {
+            return Err(format!("directive \"{}\" after the start of instructions", s))
+        }
+        if s.starts_with('!') { // MACRO
+
         }
         let s = s.split(';').next().unwrap(); // ignore comments
-        if s.trim() == "" {
-            return Ok(())
+        if s.trim() == "" { // ignore just comments
+            return Ok(None)
         }
         let parts_initial = s.trim_start().split(':'); // split off label
         let parts = parts_initial.collect::<Vec<&str>>();
         let main_instr = if parts.len() == 2 { // if there is a label, add it
             self.labels.insert(String::from(parts[0].trim()), self.counter);
             let main = parts[1].trim();
-            if main == "" {
-                return Ok(())
+            if main == "" { // ignore just labels
+                return Ok(None)
             }
             main
         }
@@ -163,7 +204,7 @@ impl Assembler {
                     Ok(v) => (v, false),
                     Err(_) => (0, true)
                 };
-                if is_literal {
+                if is_literal { // lda #bb
                     if is_label {
                         return Err(String::from("literal operand failed to parse!"))
                     }
@@ -171,7 +212,7 @@ impl Assembler {
                     line.operand = Op::Byte(operand as u8);
                     self.counter += 1
                 }
-                else {
+                else { // xyz hhll
                     let mut instr_output = 0b1000_0000;
                     match instr {
                         "org" => {
@@ -202,6 +243,9 @@ impl Assembler {
                                 _ => unreachable!()
                             };
                             if is_label {
+                                if !literal.is_ascii() {
+                                    return Err(format!("string literal \"{}\" contains non-ascii characters", literal))
+                                }
                                 line.operand = Op::Label(String::from(literal))
                             }
                             else {
@@ -224,9 +268,9 @@ impl Assembler {
             }
         }
 
-        self.lines.push(line);
+        //self.lines.push(line);
 
-        Ok(())
+        Ok(Some(line))
     }
     pub fn compile(&mut self) -> Result<Box<[u8]>, String> {
         let mut ret = Vec::new();
@@ -391,15 +435,4 @@ enum Instruction {
 
     // assembler directives
     Org, Dat
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_parse() {
-        assert_eq!(parse_int_literal("0b10"), Ok(2));
-        assert_eq!(parse_int_literal("0x10"), Ok(16));
-        assert_eq!(parse_int_literal("0d10"), Ok(10));
-    }
 }
