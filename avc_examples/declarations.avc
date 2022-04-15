@@ -1,7 +1,11 @@
-#DEFINE beans 15
-#MACRO sub
-    sec
-    not
-    add
-#ENDMAC
-#ENDDECS
+#BYTE beans 0x68
+;#MACR sub
+;    sec
+;    not
+;    add
+;#ENDM
+#ENDD
+
+lda #beans
+put
+hlt

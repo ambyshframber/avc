@@ -27,20 +27,23 @@ pub fn assemble(program: &str) -> Result<Box<[u8]>, String> {
     if lines.peek().unwrap().starts_with('#') {
         loop { // PASS 1: define/macro parsing
             let l = lines.next().unwrap();
-            if l == "#ENDDECS" {
+            if l == "#ENDD" {
                 i += 1;
                 break
             }
-            declarations.push(l);
+            if l.trim() != "" { // don't add empty lines
+                declarations.push(l);
+            }
             i += 1;
         }
     }
-    if declarations.len() != 0 {
+    /*if declarations.len() != 0 {
         println!("found declarations:");
-        for d in declarations {
+        for d in &declarations {
             println!("\t{}", d)
         }
-    }
+    }*/
+    a.process_declares(declarations)?;
 
     loop { // PASS 2: line parsing
         let l = match lines.next() {
@@ -71,6 +74,34 @@ pub fn assemble(program: &str) -> Result<Box<[u8]>, String> {
     }
 }
 impl Assembler {
+    pub fn process_declares(&mut self, decs: Vec<&str>) -> Result<(), String> {
+        let declarations = decs.iter().peekable();
+
+        for d in declarations {
+            if d.starts_with(';') {
+                continue
+            }
+
+            match &d[..5] { // #DCLR
+                "#BYTE" => { // #BYTE name val
+                    let mut s = d.split(' ');
+                    let _ = s.next();
+                    let name = match s.next() {
+                        Some(v) => v, None => return Err(format!("declaration {} missing name", d))
+                    };
+                    let val_str = match s.next() {
+                        Some(v) => v, None => return Err(format!("declaration {} missing value", d))
+                    };
+                    let val = parse_int_literal::<u8>(val_str)?;
+                    self.constants.insert(String::from(name), val);
+                }
+                _ => return Err(format!("unrecognised declaration {}", d))
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn read_line(&mut self, s: &str, index: usize) -> Result<Option<Line>, String> { // index is line number. this is the worst way of doing it, i know
         let s = s.trim();
         if s == "" { // ignore empty strings
@@ -171,10 +202,10 @@ impl Assembler {
                 let is_offset = literal.ends_with(",x");
                 if is_literal {
                     if instr != "lda" {
-                        return Err(String::from("literal operand not valid for non-lda instructions!"))
+                        return Err(String::from("literal operand not valid for non-lda instructions"))
                     }
                     if is_offset {
-                        return Err(String::from("literal operand cannot be offset!"))
+                        return Err(String::from("literal operand cannot be offset"))
                     }
                     literal = &literal[1..];
                 }
@@ -185,7 +216,7 @@ impl Assembler {
                 let is_indirect = literal.starts_with('(');
                 if is_string {
                     if !literal.ends_with('"') {
-                        return Err(String::from("string operand with no close quote!"))
+                        return Err(String::from("string operand with no close quote"))
                     }
                     else {
                         literal = &literal[1..literal.len() - 1]
@@ -193,7 +224,7 @@ impl Assembler {
                 }
                 if is_indirect {
                     if !literal.ends_with(')') {
-                        return Err(String::from("indirect address operand with no close bracket!"))
+                        return Err(String::from("indirect address operand with no close bracket"))
                     }
                     else {
                         literal = &literal[1..literal.len() - 1]
@@ -205,11 +236,15 @@ impl Assembler {
                     Err(_) => (0, true)
                 };
                 if is_literal { // lda #bb
-                    if is_label {
-                        return Err(String::from("literal operand failed to parse!"))
-                    }
                     line.instruction = I::LdaConst;
-                    line.operand = Op::Byte(operand as u8);
+                    line.operand = Op::Byte(if is_label {
+                        match self.constants.get(literal) {
+                            Some(v) => *v, None => return Err(format!("undefined constant {}", literal))
+                        }
+                    }
+                    else {
+                        operand as u8
+                    });
                     self.counter += 1
                 }
                 else { // xyz hhll
@@ -378,7 +413,6 @@ enum Operand {
     Byte(u8),
     Addr(u16),
     Label(String),
-    #[allow(dead_code)]
     ByteBlock(Box<[u8]>)
 }
 impl Default for Line {
