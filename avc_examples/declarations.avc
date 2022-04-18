@@ -4,11 +4,31 @@
     not
     add
 #ENDM
+#MACR add_const ; stores a + $1 in a
+    swp
+    psa ; keep b safe
+    lda $1
+    clc
+    add
+    swp
+    ppa
+    swp
+#ENDM
+#MACR ldb
+    swp
+    lda $1
+    swp
+#ENDM
 #ENDD
 
 lda #beans
 swp
 lda #1
 !sub ; invoke sub
+put
+!ldb #10
+!add_const #1
+put
+swp
 put
 hlt

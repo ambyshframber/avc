@@ -120,18 +120,26 @@ Indirect and offset addressing can be combined like so: `lda (0x0300),x`. This w
 
 The AVC assembler supports 2 directives: `org` and `dat`. 
 
-`org` positions the following instruction or directive at the specified position in the binary file. For example,
-
+`org` positions the following instruction or directive at the specified position in the binary file. For example,  
 ```
 org 0x0300
 lda #200
-```
-
+```  
 will position `lda #200` at the address 0x0300. All further instructions will follow on from this position.
 
 `dat` places a byte (`dat 0x10`) or string literal (`dat "string"`) in the binary. Strings are encoded using ASCII and are not zero-terminated by default.
 
-Labels can be created by placing `LABEL:` at the start of a line, where `LABEL` is the name of the label. These can then be later referenced by any instruction that uses an address, and can be offset and indirected as normal. When referenced, labels can be manipulated using simple arithmetic, evaluated at compile-time. A `+` or `-` may be applied, followed by an integer literal (see below).
+Labels can be created by placing `LABEL:` at the start of a line, where `LABEL` is the name of the label. These can then be later referenced by any instruction that uses an address, and can be offset and indirected as normal. When referenced, labels can be manipulated using simple arithmetic, evaluated at compile-time. A `+` or `-` may be applied, followed by an integer literal (see below). For example,  
+```
+sta DATA+1
+```  
+will store to the byte directly after the location of DATA.
+
+### MACROS AND DECLARATIONS
+
+At the start of a program file, declarations may be made. If the first line begins with `#`, all lines will be treated as declarations until the assembler reaches `#ENDD` on a line on its own. Currently, the assembler only supports one non-macro declaration: `#BYTE`. This will store a constant value in a dictionary, which can then be retrieved by any instruction that uses literal values (currently only `lda`). The syntax is `#BYTE NAME VALUE`.
+
+Macros are more complicated. When the assembler sees a `#MACR` tag, it will add all following lines into a buffer, until it sees the an `#ENDM` tag. The syntax for the opening tag is `#MACR NAME`. A macro can later be invoked in the assembly with `!NAME`, where `NAME` is the name of the macro. This can also be followed by a list of arguments. Arguments are substituted into the text in a manner similar to shell scripts: `$1` refers to the first argument, `$2` refers to the second, etc.
 
 ## INTEGER LITERALS
 

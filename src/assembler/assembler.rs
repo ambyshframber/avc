@@ -153,7 +153,7 @@ impl Assembler {
             parts[0]
         };
         if s.starts_with('!') { // MACRO
-            self.expand_macro(main_instr)?;
+            self.expand_macro(main_instr, index)?;
             return Ok(None)
         }
         
@@ -223,44 +223,11 @@ impl Assembler {
                 // dat "string"
                 // lda (addr,x)
                 // lda #bb
-                let mut literal = op;
-                let is_literal = literal.starts_with('#');
-                let is_offset = literal.ends_with(",x");
-                if is_literal {
-                    if instr != "lda" {
-                        return Err(String::from("literal operand not valid for non-lda instructions"))
-                    }
-                    if is_offset {
-                        return Err(String::from("literal operand cannot be offset"))
-                    }
-                    literal = &literal[1..];
+                let (literal, operand, is_label, is_offset, is_indirect, is_string, is_literal) = parse_op(op)?;
+                
+                if is_literal && instr != "lda" {
+                    return Err(format!("literal operands are not allowed for non-lda instructions"))
                 }
-                if is_offset {
-                    literal = &literal[..literal.len() - 2]
-                }
-                let is_string = literal.starts_with('"');
-                let is_indirect = literal.starts_with('(');
-                if is_string {
-                    if !literal.ends_with('"') {
-                        return Err(String::from("string operand with no close quote"))
-                    }
-                    else {
-                        literal = &literal[1..literal.len() - 1]
-                    }
-                }
-                if is_indirect {
-                    if !literal.ends_with(')') {
-                        return Err(String::from("indirect address operand with no close bracket"))
-                    }
-                    else {
-                        literal = &literal[1..literal.len() - 1]
-                    }
-                }
-                //dbg!(literal);
-                let (operand, is_label) = match parse_int_literal(literal) {
-                    Ok(v) => (v, false),
-                    Err(_) => (0, true)
-                };
                 if is_literal { // lda #bb
                     line.instruction = I::LdaConst;
                     line.operand = Op::Byte(if is_label {
@@ -334,15 +301,24 @@ impl Assembler {
         Ok(Some(line))
     }
 
-    fn expand_macro(&mut self, line: &str) -> Result<(), String> {
+    fn expand_macro(&mut self, line: &str, index: usize) -> Result<(), String> {
         // comments/labels already stripped out
-        let args: Vec<&str> = line.split(' ').collect();
-
-        let mac_lines = match self.macros.get(&args[0][1..]) { // remove '!'
-            Some(v) => v, None => return Err(format!("macro {} not found", args[0]))
+        let mut args = line.trim().split(' ');
+        
+        let mac = &args.next().unwrap()[1..];
+        let mac_lines = match self.macros.get(mac) { // remove '!'
+            Some(v) => v,
+            None => return Err(format!("macro {} not found", mac))
         }.clone();
-        println!("invoking macro");
-        for l in mac_lines {
+        let mut replacements = HashMap::new();
+        for (i, a) in args.enumerate() {
+            let rep = format!("${}", i + 1);
+            replacements.insert(rep, a);
+        }
+        for mut l in mac_lines {
+            for (key, val) in &replacements {
+                l = l.replace(key, val)
+            }
             match self.read_line(&l, 0)? {
                 Some(v) => self.lines.push(v), None => {}
             }
@@ -447,6 +423,45 @@ impl Assembler {
 
         Ok(ret.into_boxed_slice())
     }
+}
+
+fn parse_op(op: &str) -> Result<(&str, u16, bool, bool, bool, bool, bool), String> {
+    let mut literal = op;
+    let is_literal = literal.starts_with('#');
+    let is_offset = literal.ends_with(",x");
+    if is_literal {
+        if is_offset {
+            return Err(String::from("literal operand cannot be offset"))
+        }
+        literal = &literal[1..];
+    }
+    if is_offset {
+        literal = &literal[..literal.len() - 2]
+    }
+    let is_string = literal.starts_with('"');
+    let is_indirect = literal.starts_with('(');
+    if is_string {
+        if !literal.ends_with('"') {
+            return Err(String::from("string operand with no close quote"))
+        }
+        else {
+            literal = &literal[1..literal.len() - 1]
+        }
+    }
+    if is_indirect {
+        if !literal.ends_with(')') {
+            return Err(String::from("indirect address operand with no close bracket"))
+        }
+        else {
+            literal = &literal[1..literal.len() - 1]
+        }
+    }
+    //dbg!(literal);
+    let (operand, is_label) = match parse_int_literal(literal) {
+        Ok(v) => (v, false),
+        Err(_) => (0, true)
+    };
+    Ok((literal, operand, is_label, is_offset, is_indirect, is_string, is_literal))
 }
 
 struct Line {
