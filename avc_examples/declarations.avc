@@ -1,11 +1,14 @@
-#BYTE beans 0x68
-;#MACR sub
-;    sec
-;    not
-;    add
-;#ENDM
+#BYTE beans 0x69
+#MACR sub ; stores b - a in a
+    sec
+    not
+    add
+#ENDM
 #ENDD
 
 lda #beans
+swp
+lda #1
+!sub ; invoke sub
 put
 hlt

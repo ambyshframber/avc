@@ -14,7 +14,7 @@ struct Assembler {
     pub labels: HashMap<String, usize>,
     counter: usize,
     pub constants: HashMap<String, u8>,
-    macros: HashMap<String, Vec<Line>>
+    macros: HashMap<String, Vec<String>>
 }
 
 pub fn assemble(program: &str) -> Result<Box<[u8]>, String> {
@@ -32,7 +32,7 @@ pub fn assemble(program: &str) -> Result<Box<[u8]>, String> {
                 break
             }
             if l.trim() != "" { // don't add empty lines
-                declarations.push(l);
+                declarations.push(String::from(l));
             }
             i += 1;
         }
@@ -74,10 +74,13 @@ pub fn assemble(program: &str) -> Result<Box<[u8]>, String> {
     }
 }
 impl Assembler {
-    pub fn process_declares(&mut self, decs: Vec<&str>) -> Result<(), String> {
-        let declarations = decs.iter().peekable();
+    pub fn process_declares(&mut self, decs: Vec<String>) -> Result<(), String> {
+        let mut declarations = decs.iter();
 
-        for d in declarations {
+        loop {
+            let d = match declarations.next() {
+                Some(v) => v, None => break
+            };
             if d.starts_with(';') {
                 continue
             }
@@ -87,15 +90,37 @@ impl Assembler {
                     let mut s = d.split(' ');
                     let _ = s.next();
                     let name = match s.next() {
-                        Some(v) => v, None => return Err(format!("declaration {} missing name", d))
+                        Some(v) => v, None => return Err(format!("declaration \"{}\" missing name", d))
                     };
                     let val_str = match s.next() {
-                        Some(v) => v, None => return Err(format!("declaration {} missing value", d))
+                        Some(v) => v, None => return Err(format!("declaration \"{}\" missing value", d))
                     };
                     let val = parse_int_literal::<u8>(val_str)?;
                     self.constants.insert(String::from(name), val);
                 }
-                _ => return Err(format!("unrecognised declaration {}", d))
+                "#MACR" => { // can have arguments
+                    let mut mac_lines = Vec::new();
+                    loop { // collect all lines until "#ENDM" into a vec
+                        match declarations.next() {
+                            Some(v) => {
+                                if !v.starts_with("#ENDM") {
+                                    mac_lines.push(String::from(v))
+                                }
+                                else {
+                                    break
+                                }
+                            }
+                            None => {
+                                return Err(format!("macro without close tag"))
+                            }
+                        }
+                    }
+                    let mac_name = &d[5..].trim();
+                    let mac_name = mac_name.split([';', ' ']).next().unwrap().trim();
+                    //println!("{}", mac_name);
+                    self.macros.insert(String::from(mac_name), mac_lines);
+                }
+                _ => return Err(format!("unrecognised declaration \"{}\"", d))
             }
         }
 
@@ -109,9 +134,6 @@ impl Assembler {
         }
         if s.starts_with('#') {
             return Err(format!("directive \"{}\" after the start of instructions", s))
-        }
-        if s.starts_with('!') { // MACRO
-
         }
         let s = s.split(';').next().unwrap(); // ignore comments
         if s.trim() == "" { // ignore just comments
@@ -130,6 +152,10 @@ impl Assembler {
         else {
             parts[0]
         };
+        if s.starts_with('!') { // MACRO
+            self.expand_macro(main_instr)?;
+            return Ok(None)
+        }
         
         self.counter += 1; // bump counter
 
@@ -299,7 +325,7 @@ impl Assembler {
 
             }
             _ => {
-                return Err(format!("unrecognised instruction {}!", instr))
+                return Err(format!("unrecognised instruction {}", instr))
             }
         }
 
@@ -307,6 +333,26 @@ impl Assembler {
 
         Ok(Some(line))
     }
+
+    fn expand_macro(&mut self, line: &str) -> Result<(), String> {
+        // comments/labels already stripped out
+        let args: Vec<&str> = line.split(' ').collect();
+
+        let mac_lines = match self.macros.get(&args[0][1..]) { // remove '!'
+            Some(v) => v, None => return Err(format!("macro {} not found", args[0]))
+        }.clone();
+        println!("invoking macro");
+        for l in mac_lines {
+            match self.read_line(&l, 0)? {
+                Some(v) => self.lines.push(v), None => {}
+            }
+        }
+
+
+        Ok(())
+    }
+
+
     pub fn compile(&mut self) -> Result<Box<[u8]>, String> {
         let mut ret = Vec::new();
 
