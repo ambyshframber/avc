@@ -1,6 +1,8 @@
 use std::io::{Write, stdout, Read};
 use std::fs::read;
 //use std::num::Wrapping;
+use std::thread::sleep;
+use std::time::Duration;
 
 use termion::async_stdin;
 
@@ -72,16 +74,16 @@ impl Processor {
 
     pub fn run(&mut self, po: &Options) {
         match po.debug_level {
-            0 => self.execute_until_halt(),
+            0 => self.execute_until_halt(po),
             1|2 => {
                 while !self.halted {
-                    self.execute_until_break(po.debug_level == 2);
+                    self.execute_until_break(po.debug_level == 2, po);
                     println!("{}", self.readout())
                 }
             }
             3 => {
                 while !self.halted {
-                    self.execute(true);
+                    self.execute(true, po);
                     println!("{}", self.readout())
                 }
             }
@@ -89,15 +91,15 @@ impl Processor {
         }
     }
 
-    pub fn execute_until_halt(&mut self) {
+    pub fn execute_until_halt(&mut self, po: &Options) {
         while !self.halted {
-            self.execute(false);
+            self.execute(false, po);
         }
         println!("")
     }
-    pub fn execute_until_break(&mut self, print_instr: bool) {
+    pub fn execute_until_break(&mut self, print_instr: bool, po: &Options) {
         while !self.halted {
-            if self.execute(print_instr) {
+            if self.execute(print_instr, po) {
                 break
             }
         }
@@ -108,13 +110,13 @@ impl Processor {
         self.reader.read_to_end(&mut self.get_buffer).unwrap();
     }
 
-    fn execute(&mut self, print_instr: bool) -> bool { // returns true if instr is break
+    fn execute(&mut self, print_instr: bool, po: &Options) -> bool { // returns true if instr is break
         if self.program_counter > u16::MAX as usize {
             self.program_counter %= u16::MAX as usize
         }
         let instr = self.memory[self.program_counter];
         if print_instr {
-            println!("\n{}", instr)
+            println!("{}", instr)
         }
         if instr == 23 {
             self.program_counter += 1;
@@ -137,6 +139,8 @@ impl Processor {
         else {
             self.status &= !0b10
         }
+
+        sleep(Duration::from_millis(po.clock_period));
 
         false
     }
@@ -254,6 +258,7 @@ impl Processor {
                 // earlier code should skip the cycle
             }
             24 => { // rts
+                //dbg!("rts ing");
                 let hi = self.pop();
                 let lo = self.pop();
                 self.program_counter = bytes_to_16(hi, lo) as usize
@@ -345,7 +350,8 @@ impl Processor {
             0b001 => self.memory[addr] = self.a,
             0b010 => self.program_counter = addr,
             0b011 => {
-                let (hb, lb) = u16_to_bytes(self.program_counter as u16);
+                //dbg!("jsr ing");
+                let (hb, lb) = u16_to_bytes((self.program_counter) as u16);
                 self.push(lb);
                 self.push(hb);
                 self.program_counter = addr
@@ -365,13 +371,14 @@ impl Processor {
     }
 
     fn push(&mut self, byte: u8) {
-        //dbg!("pushing");
+        //println!("pushing {:x}", byte);
         self.memory[self.stack_pointer] = byte;
         self.stack_pointer += 1
     }
     fn pop(&mut self) -> u8 {
-        //dbg!("popping");
         self.stack_pointer -= 1;
-        self.memory[self.stack_pointer]
+        let byte = self.memory[self.stack_pointer];
+        //println!("popping {:x}", byte);
+        byte
     }
 }

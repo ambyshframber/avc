@@ -253,7 +253,16 @@ impl Assembler {
                             if is_string {
                                 let bytes = literal.bytes().collect::<Vec<u8>>();
                                 self.counter += bytes.len() - 1; // i don't know why the -1 is needed, but it is.
-                                line.operand = Op::ByteBlock(bytes.into_boxed_slice())
+                                line.operand = Op::ByteBlock(bytes)
+                            }
+                            else if is_label { // didn't parse as number
+                                let s = literal.split(',');
+                                let mut bytes = Vec::new();
+                                for num in s {
+                                    bytes.push(self.get_val_from_string(num)?)
+                                }
+                                self.counter += bytes.len() - 1;
+                                line.operand = Op::ByteBlock(bytes)
                             }
                             else {
                                 line.operand = Op::Byte(operand as u8);
@@ -301,6 +310,7 @@ impl Assembler {
         Ok(Some(line))
     }
 
+    #[allow(unused_variables)]
     fn expand_macro(&mut self, line: &str, index: usize) -> Result<(), String> {
         // comments/labels already stripped out
         let mut args = line.trim().split(' ');
@@ -319,8 +329,13 @@ impl Assembler {
             for (key, val) in &replacements {
                 l = l.replace(key, val)
             }
-            match self.read_line(&l, 0)? {
-                Some(v) => self.lines.push(v), None => {}
+            match self.read_line(&l, 0) {
+                Ok(v) => {
+                    match v {
+                        Some(v) => self.lines.push(v), None => {}
+                    }
+                }
+                Err(e) => return Err(format!("error in macro {}: {}", mac, e))
             }
         }
 
@@ -365,8 +380,8 @@ impl Assembler {
             match &line.operand {
                 Operand::Byte(b) => ret.push(*b),
                 Operand::ByteBlock(b) => {
-                    for byte in b.clone().into_vec() {
-                        ret.push(byte)
+                    for byte in b {
+                        ret.push(*byte)
                     }
                 }
                 _ => unreachable!()
@@ -423,6 +438,19 @@ impl Assembler {
 
         Ok(ret.into_boxed_slice())
     }
+
+    fn get_val_from_string(&self, s: &str) -> Result<u8, String> { // returns u8 in lb and false if it's u8
+        let s = s.trim();
+        match parse_int_literal::<u8>(s) {
+            Ok(v) => Ok(v),
+            Err(_) => {
+                match self.constants.get(s) {
+                    Some(v) => Ok(*v),
+                    None => Err(format!("undefined constant {}", s))
+                }
+            }
+        }
+    }
 }
 
 fn parse_op(op: &str) -> Result<(&str, u16, bool, bool, bool, bool, bool), String> {
@@ -474,7 +502,7 @@ enum Operand {
     Byte(u8),
     Addr(u16),
     Label(String),
-    ByteBlock(Box<[u8]>)
+    ByteBlock(Vec<u8>)
 }
 impl Default for Line {
     fn default() -> Line {

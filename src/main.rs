@@ -58,9 +58,10 @@ fn get_options() -> Options {
             .add_option(&["-R"], StoreConst(Command::AssAndRun), "assemble and run")
             .required()
         ;
+        ap.refer(&mut o.path).add_argument("file", Store, "the file to run/assemble");
         ap.refer(&mut o.out_path).add_option(&["-o"], Store, "Output file path (for assembly)");
         ap.refer(&mut o.debug_level).add_option(&["-d"], Store, "Debug level. 0 is none, 1 is readout on break, 2 is 1+instructions, 3 is readout every cycle");
-        ap.refer(&mut o.path).add_argument("file", Store, "the file to run/assemble");
+        ap.refer(&mut o.clock_period).add_option(&["-p"], Store, "The time in miliseconds to wait every clock cycle. Default is 0.");
 
         ap.parse_args_or_exit()
     }

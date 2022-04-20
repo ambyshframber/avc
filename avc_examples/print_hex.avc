@@ -1,0 +1,54 @@
+#BYTE output 0x6f
+#MACR ldb
+        swp
+        lda $1
+        swp
+#ENDM
+#MACR add_const
+        swp
+        psa
+        lda $1
+        add
+        swp
+        ppa
+        swp
+#ENDM
+#ENDD
+
+        lda #0xf0
+        ssp ; put stack in high memory
+        lda #output
+        jsr PRINTHEX
+        lda #0x70
+        !add_const #1
+        jsr PRINTHEX
+        hlt
+
+PRINTHEX: ; prints the contents of a as hex
+        swp
+        psa ; keep b safe
+        lda #0b1111 ; mask
+        swp
+        psa ; backup of a
+        psa
+        lsl ; shift
+        lsl
+        lsl
+        lsl
+        and ; mask out lower nybble
+        tax
+        lda HEX,x
+        put
+        ppa
+        and ; mask out lower nybble
+        tax
+        lda HEX,x
+        put
+        ppa
+        swp
+        ppa ; get b back
+        swp
+        rts
+
+HEX:
+        dat "0123456789ABCDEF"

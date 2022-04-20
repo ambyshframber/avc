@@ -12,7 +12,8 @@ pub struct Options {
     pub command: Command,
     pub path: String,
     pub out_path: String,
-    pub debug_level: i32
+    pub debug_level: i32,
+    pub clock_period: u64,
 }
 
 pub fn bytes_to_16(hb: u8, lb: u8) -> u16 {
